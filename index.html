@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OldCam">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<title>OldCam</title>
+<style>
+  :root{--acc:#ff8a2a}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:#000;color:#eee;font-family:-apple-system,"Hiragino Sans",sans-serif;overflow:hidden;-webkit-user-select:none;user-select:none}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  #top{display:flex;align-items:center;gap:22px;padding:12px 22px;height:56px}
+  #top button{background:none;border:0;color:#fff;font-size:15px;font-weight:700;padding:6px 4px}
+  #top .sp{flex:1}
+  .on{color:var(--acc)!important}
+  #stage{position:relative;width:100%;aspect-ratio:3/4;max-height:calc(100% - 200px);margin:0 auto;background:#111;overflow:hidden}
+  #gl{width:100%;height:100%;display:block;object-fit:cover}
+  #msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:14px;color:#bbb;line-height:1.7}
+  #bottom{flex:1;display:flex;align-items:center;justify-content:space-between;padding:0 30px;min-height:120px}
+  #thumb{width:52px;height:52px;border-radius:8px;background:#222 center/cover;border:0}
+  #shutter{width:78px;height:78px;border-radius:50%;border:4px solid #fff;background:none;padding:0;display:flex;align-items:center;justify-content:center}
+  #shutter span{width:62px;height:62px;border-radius:50%;background:#fff;transition:transform .08s}
+  #shutter:active span{transform:scale(.88)}
+  #flip{width:52px;height:52px;border-radius:50%;background:#222;border:0;color:#fff;font-size:22px}
+  #libRow{text-align:center;padding-bottom:10px}
+  #libRow label{font-size:13px;color:#aaa;padding:6px 12px;border:1px solid #333;border-radius:20px}
+  #libRow input{display:none}
+  #white{position:fixed;inset:0;background:#fff;display:none;z-index:50}
+  .layer{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:40;display:none;flex-direction:column;padding:calc(env(safe-area-inset-top) + 14px) 18px calc(env(safe-area-inset-bottom) + 14px)}
+  .layer.show{display:flex}
+  #viewer img{flex:1;min-height:0;width:100%;object-fit:contain;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto}
+  .btns{display:flex;gap:10px;margin-top:14px}
+  .btns button{flex:1;padding:14px;border-radius:12px;border:0;font-size:16px;font-weight:700}
+  .pri{background:var(--acc);color:#111}
+  .sec{background:#2a2a2a;color:#eee}
+  .hint{font-size:12px;color:#888;text-align:center;margin-top:8px}
+  #sheet .inner{overflow:auto;flex:1}
+  #sheet h2{font-size:17px;margin:4px 0 14px}
+  .seg{display:flex;gap:8px;margin-bottom:14px}
+  .seg button{flex:1;padding:10px 4px;border-radius:10px;border:1px solid #444;background:#1c1c1c;color:#eee;font-size:13px}
+  .seg button.on{border-color:var(--acc)}
+  .row{display:flex;align-items:center;gap:10px;margin:14px 0;font-size:14px}
+  .row label{width:92px;flex:none}
+  .row input{flex:1;accent-color:var(--acc)}
+  .row span{width:30px;text-align:right;color:#888;font-variant-numeric:tabular-nums}
+  video{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <button id="bFlash">⚡︎ OFF</button>
+    <button id="bDate">DATE</button>
+    <div class="sp"></div>
+    <button id="bSet">調整</button>
+  </div>
+  <div id="stage"><canvas id="gl"></canvas><div id="msg">カメラを起動中…</div></div>
+  <div id="bottom">
+    <button id="thumb" aria-label="さっき撮った写真"></button>
+    <button id="shutter" aria-label="撮影"><span></span></button>
+    <button id="flip" aria-label="カメラ切り替え">⟲</button>
+  </div>
+  <div id="libRow"><label>写真フォルダから加工する<input id="file" type="file" accept="image/*"></label></div>
+</div>
+
+<div id="white"></div>
+
+<div class="layer" id="viewer">
+  <img id="vImg" alt="撮った写真">
+  <div class="btns">
+    <button class="sec" id="vClose">閉じる</button>
+    <button class="pri" id="vSave">保存する</button>
+  </div>
+  <p class="hint">保存を押したら「画像を保存」を選んでな。うまくいかへん時は写真を長押しでもOK</p>
+</div>
+
+<div class="layer" id="sheet">
+  <div class="inner">
+    <h2>色の調整</h2>
+    <div class="seg" id="presets">
+      <button data-p="orig">Original</button>
+      <button data-p="flash">フラッシュ</button>
+      <button data-p="mild">うすめ</button>
+    </div>
+    <div id="sliders"></div>
+  </div>
+  <div class="btns"><button class="pri" id="sClose">OK</button></div>
+</div>
+
+<video id="v" playsinline muted autoplay></video>
+<canvas id="c2" hidden></canvas>
+
+<script>
+const $ = id => document.getElementById(id);
+const KEYS = [["bright","明るさ"],["warm","あったかさ"],["fade","くすみ"],["glow","ふんわり光"],["soft","ぼんやり感"],
+              ["sharp","シャープ"],["contrast","コントラスト"],["vig","周辺の暗さ"],["noise","ノイズ"]];
+const PRESETS = {
+  orig:  {bright:50, warm:45, fade:100, glow:70, soft:20, sharp:45, contrast:35, vig:35, noise:40},
+  flash: {bright:55, warm:40, fade:90,  glow:85, soft:45, sharp:50, contrast:45, vig:50, noise:45},
+  mild:  {bright:40, warm:25, fade:60,  glow:45, soft:30, sharp:40, contrast:30, vig:20, noise:25}
+};
+function load(k, d){ try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch(e){ return d; } }
+function store(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+
+let S = Object.assign({}, PRESETS.orig, load("oldcam.s", {}));
+const st = Object.assign({flash:false, date:false, front:false}, load("oldcam.ui", {}));
+let stream = null, torchOK = false, busy = false, lastBlob = null, lutDirty = true;
+
+/* ---------- WebGL ---------- */
+const cv = $("gl");
+const gl = cv.getContext("webgl", {preserveDrawingBuffer:true, premultipliedAlpha:false, antialias:false});
+const VS = `attribute vec2 a; varying vec2 vUv;
+void main(){ vUv = vec2(a.x*.5+.5, .5-a.y*.5); gl_Position = vec4(a,0.,1.); }`;
+const FS = `precision highp float;
+varying vec2 vUv;
+uniform sampler2D uTex, uLut;
+uniform vec2 uOff, uSize, uPx;
+uniform float uMirror, uSoft, uSharp, uGlow, uVig, uNoise, uSeed, uAspect, uFlash, uScale;
+uniform vec3 uFade;
+vec2 S(vec2 p){ if (uMirror > .5) p.x = 1. - p.x; return uOff + clamp(p, 0., 1.) * uSize; }
+vec3 T(vec2 p){ return texture2D(uTex, S(p)).rgb; }
+float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + uSeed) * 43758.5453); }
+void main(){
+  vec2 p = vUv;
+  vec3 c = T(p);
+  float r1 = max(1., uScale);
+  vec3 bs = (T(p+vec2(uPx.x*r1,0.)) + T(p-vec2(uPx.x*r1,0.)) + T(p+vec2(0.,uPx.y*r1)) + T(p-vec2(0.,uPx.y*r1))) * .25;
+  float r2 = (1.5 + 3.*uSoft) * uScale;
+  vec3 bl = (T(p+vec2(uPx.x*r2, uPx.y*r2*.5)) + T(p-vec2(uPx.x*r2, uPx.y*r2*.5))
+           + T(p+vec2(-uPx.x*r2*.5, uPx.y*r2)) + T(p-vec2(-uPx.x*r2*.5, uPx.y*r2)) + bs*2.) / 6.;
+  vec3 col = mix(c, bl, uSoft*.85);
+  col += uSharp * 1.4 * (c - bs);
+
+  vec2 q = (p - vec2(.5, .48)) * vec2(uAspect, 1.);
+  float d = length(q) / (.5 * length(vec2(uAspect, 1.)));
+  if (uFlash > 0.){
+    float f = uFlash * exp(-d*d/.12);
+    col = col*(1. + f*.8) + f*.12;
+    col *= 1. - uFlash*.25*min(1., d*d*2.2);
+  }
+  col = clamp(col, 0., 1.);
+
+  vec3 g = vec3(0.);
+  for (int i = 0; i < 12; i++){
+    float fi = float(i);
+    float rr = i < 6 ? .035 : .075;
+    float an = fi * 1.0472 + (i < 6 ? 0. : .5236);
+    vec2 off = vec2(cos(an), sin(an)) * rr * vec2(1./uAspect, 1.);
+    vec3 s = T(p + off);
+    float l = dot(s, vec3(.3, .59, .11));
+    g += s * clamp((l - .55) / .4, 0., 1.);
+  }
+  g = g / 12. * vec3(1., .9, .8);
+
+  col = vec3(texture2D(uLut, vec2(col.r*.99609+.00195, .5)).r,
+             texture2D(uLut, vec2(col.g*.99609+.00195, .5)).g,
+             texture2D(uLut, vec2(col.b*.99609+.00195, .5)).b);
+  float m = (col.r + col.g + col.b) / 3.;
+  col = m + (col - m) * 1.12;
+  col = 1. - (1. - clamp(col, 0., 1.)) * (1. - clamp(g * uGlow * 1.6, 0., 1.));
+  col *= 1. - uVig * .5 * pow(d, 2.2);
+  col = uFade + (1. - uFade) * clamp(col, 0., 1.);
+  if (uNoise > 0.){
+    vec2 np = floor(p / uPx / max(1., uScale*1.2));
+    float n = h(np) + h(np+17.3) + h(np+41.7) - 1.5;
+    float cn = h(np+7.1) - .5;
+    float sh = 1. - (col.r + col.g + col.b) / 3.;
+    float amt = uNoise * 20. / 255. * (.45 + .9*sh*sh);
+    col += vec3(n + cn*.35, n, n - cn*.35) * amt;
+  }
+  gl_FragColor = vec4(clamp(col, 0., 1.), 1.);
+}`;
+function sh(type, src){ const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog); gl.useProgram(prog);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aLoc = gl.getAttribLocation(prog, "a"); gl.enableVertexAttribArray(aLoc); gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+const U = {}; ["uTex","uLut","uOff","uSize","uPx","uMirror","uSoft","uSharp","uGlow","uVig","uNoise","uSeed","uAspect","uFlash","uScale","uFade"]
+  .forEach(n => U[n] = gl.getUniformLocation(prog, n));
+function mkTex(unit){ const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0+unit); gl.bindTexture(gl.TEXTURE_2D, t);
+  [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(p => gl.texParameteri(gl.TEXTURE_2D, p, gl.CLAMP_TO_EDGE));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); return t; }
+const texSrc = mkTex(0), texLut = mkTex(1);
+gl.uniform1i(U.uTex, 0); gl.uniform1i(U.uLut, 1);
+
+// 色（暖色寄り・黒が浮く・白は飛びぎみ）のトーンカーブ
+function updateLut(){
+  const w = S.warm/100, c = 2 + S.contrast/100*5, ex = S.bright/100*0.6;
+  const sig = v => 1/(1+Math.exp(-c*(v-0.5))), s0 = sig(0), s1 = sig(1);
+  const px = new Uint8Array(256*4);
+  for (let i = 0; i < 256; i++){
+    const x = Math.min(1, i/255*(1+ex));
+    const t = 0.5*(sig(x)-s0)/(s1-s0) + 0.5*x;
+    px[i*4]   = Math.min(255, 255*Math.pow(t, 1-0.2*w));
+    px[i*4+1] = Math.min(255, 255*Math.pow(t, 1+0.03*w)*(1-0.03*w));
+    px[i*4+2] = Math.min(255, 255*Math.pow(t, 1+0.18*w)*(1-0.05*w));
+    px[i*4+3] = 255;
+  }
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texLut);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  lutDirty = false;
+}
+
+// src を outW×outH に描く。crop<1 で画角を狭める（24mm→28mmくらい）
+function render(src, sw, sh, outW, outH, mirror, crop, flash){
+  if (lutDirty) updateLut();
+  const a = outW/outH; let cw = sw, ch = sh;
+  if (sw/sh > a) cw = sh*a; else ch = sw/a;
+  cw *= crop; ch *= crop;
+  if (cv.width !== outW || cv.height !== outH){ cv.width = outW; cv.height = outH; }
+  gl.viewport(0, 0, outW, outH);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texSrc);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, src);
+  gl.uniform2f(U.uOff, (sw-cw)/2/sw, (sh-ch)/2/sh);
+  gl.uniform2f(U.uSize, cw/sw, ch/sh);
+  gl.uniform2f(U.uPx, 1/outW, 1/outH);
+  gl.uniform1f(U.uMirror, mirror ? 1 : 0);
+  gl.uniform1f(U.uSoft, S.soft/100); gl.uniform1f(U.uSharp, S.sharp/100);
+  gl.uniform1f(U.uGlow, S.glow/100); gl.uniform1f(U.uVig, S.vig/100);
+  gl.uniform1f(U.uNoise, S.noise/100); gl.uniform1f(U.uSeed, Math.random()*100);
+  gl.uniform1f(U.uAspect, a); gl.uniform1f(U.uFlash, flash);
+  gl.uniform1f(U.uScale, Math.max(outW, outH)/1600);
+  const f = S.fade/100; gl.uniform3f(U.uFade, 30/255*f, 24/255*f, 23/255*f);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+/* ---------- カメラ ---------- */
+const v = $("v");
+const simFlash = () => (st.flash && !st.front && !torchOK) ? 0.6 : 0;
+
+async function startCam(){
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  $("msg").textContent = "カメラを起動中…"; $("msg").style.display = "flex";
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({audio:false, video:{
+      facingMode: st.front ? "user" : "environment", width:{ideal:1920}, height:{ideal:1440}}});
+  } catch(e){
+    $("msg").innerHTML = "カメラを使えへんかった…<br>iPhoneの「設定 → アプリ → Safari → カメラ」を<br>「確認」か「許可」にしてもう一回開いてな";
+    return;
+  }
+  v.srcObject = stream;
+  try { await v.play(); } catch(e){}
+  try { const caps = stream.getVideoTracks()[0].getCapabilities?.(); torchOK = !!(caps && caps.torch); } catch(e){ torchOK = false; }
+  $("msg").style.display = "none";
+}
+
+function loop(){
+  if (!busy && stream && v.readyState >= 2 && v.videoWidth){
+    const W = Math.round(Math.min(900, $("stage").clientHeight * (window.devicePixelRatio||2)) * 3/4);
+    render(v, v.videoWidth, v.videoHeight, W, Math.round(W*4/3), st.front, 0.86, simFlash());
+  }
+  requestAnimationFrame(loop);
+}
+
+async function torch(on){
+  try { await stream.getVideoTracks()[0].applyConstraints({advanced:[{torch:on}]}); return true; } catch(e){ return false; }
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function shoot(){
+  if (busy || !stream || !v.videoWidth) return;
+  busy = true;
+  let usedTorch = false;
+  if (st.flash){
+    if (st.front){ $("white").style.display = "block"; await sleep(350); }
+    else if (torchOK){ usedTorch = await torch(true); if (usedTorch) await sleep(700); }
+  }
+  render(v, v.videoWidth, v.videoHeight, 1200, 1600, st.front, 0.86, simFlash());
+  $("white").style.display = "none";
+  if (usedTorch) torch(false);
+  await finish(1200, 1600);
+  busy = false;
+}
+
+// 日付スタンプ → JPEG（あえて圧縮強め）
+function finish(W, H){
+  return new Promise(res => {
+    const c2 = $("c2"); c2.width = W; c2.height = H;
+    const ctx = c2.getContext("2d");
+    ctx.drawImage(cv, 0, 0);
+    if (st.date){
+      const now = new Date();
+      const t = "'" + String(now.getFullYear()).slice(2) + " " + String(now.getMonth()+1).padStart(2," ") + " " + String(now.getDate()).padStart(2,"0");
+      const fs = Math.round(Math.min(W, H) * 0.045);
+      ctx.font = "bold " + fs + "px 'Courier New', monospace";
+      ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+      ctx.shadowColor = "rgba(255,120,30,0.9)"; ctx.shadowBlur = fs*0.35;
+      ctx.fillStyle = "#ffa040";
+      ctx.fillText(t, W - fs*1.1, H - fs*0.9);
+      ctx.shadowBlur = 0;
+    }
+    c2.toBlob(b => {
+      lastBlob = b;
+      const url = URL.createObjectURL(b);
+      $("vImg").src = url;
+      $("thumb").style.backgroundImage = "url(" + url + ")";
+      $("viewer").classList.add("show");
+      res();
+    }, "image/jpeg", 0.72);
+  });
+}
+
+async function save(){
+  if (!lastBlob) return;
+  const d = new Date(), p = n => String(n).padStart(2,"0");
+  const name = `OldCam_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.jpg`;
+  const file = new File([lastBlob], name, {type:"image/jpeg"});
+  if (navigator.canShare && navigator.canShare({files:[file]})){
+    try { await navigator.share({files:[file]}); } catch(e){}
+  } else {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(lastBlob); a.download = name; a.click();
+  }
+}
+
+/* ---------- 写真フォルダから加工 ---------- */
+$("file").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const img = new Image();
+  img.onload = async () => {
+    busy = true;
+    const s = 1600 / Math.max(img.naturalWidth, img.naturalHeight);
+    const W = Math.round(img.naturalWidth*s), H = Math.round(img.naturalHeight*s);
+    render(img, img.naturalWidth, img.naturalHeight, W, H, false, 1, 0);
+    await finish(W, H);
+    busy = false;
+    e.target.value = "";
+  };
+  img.src = URL.createObjectURL(f);
+});
+
+/* ---------- UI ---------- */
+function ui(){
+  $("bFlash").textContent = st.flash ? "⚡︎ ON" : "⚡︎ OFF";
+  $("bFlash").classList.toggle("on", st.flash);
+  $("bDate").classList.toggle("on", st.date);
+  store("oldcam.ui", st);
+}
+$("bFlash").onclick = () => { st.flash = !st.flash; ui(); };
+$("bDate").onclick = () => { st.date = !st.date; ui(); };
+$("flip").onclick = () => { st.front = !st.front; ui(); startCam(); };
+$("shutter").onclick = shoot;
+$("thumb").onclick = () => { if (lastBlob) $("viewer").classList.add("show"); };
+$("vClose").onclick = () => $("viewer").classList.remove("show");
+$("vSave").onclick = save;
+$("bSet").onclick = () => $("sheet").classList.add("show");
+$("sClose").onclick = () => $("sheet").classList.remove("show");
+
+const sl = $("sliders");
+KEYS.forEach(([k, label]) => {
+  const r = document.createElement("div"); r.className = "row";
+  r.innerHTML = `<label>${label}</label><input type="range" min="0" max="100" id="s_${k}"><span></span>`;
+  sl.appendChild(r);
+  const inp = r.querySelector("input");
+  inp.addEventListener("input", () => { S[k] = +inp.value; markPreset(null); syncSliders(); });
+});
+function syncSliders(){
+  KEYS.forEach(([k]) => { const i = $("s_" + k); i.value = S[k]; i.nextElementSibling.textContent = S[k]; });
+  lutDirty = true; store("oldcam.s", S);
+}
+function markPreset(p){ document.querySelectorAll("#presets button").forEach(b => b.classList.toggle("on", b.dataset.p === p)); }
+$("presets").addEventListener("click", e => {
+  const p = e.target.dataset.p; if (!p) return;
+  S = Object.assign({}, PRESETS[p]); markPreset(p); syncSliders();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden){ if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; }
+  else startCam();
+});
+
+ui(); syncSliders();
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+  $("msg").innerHTML = "このページはカメラを使えへん開き方になってる…<br>SafariでURLを直接開いてな";
+} else startCam();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
